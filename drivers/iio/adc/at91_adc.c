@@ -80,6 +80,7 @@
 
 #define AT91_ADC_SR_9X5		0x30		/* Status Register for 9x5 */
 #define		AT91_ADC_SR_DRDY_9X5	(1 << 24)	/* Data Ready */
+#define		AT91_ADC_SR_EOC_9X5	(0xfff)		/* End of Conversion */
 
 #define AT91_ADC_LCDR		0x20		/* Last Converted Data Register */
 #define		AT91_ADC_LDATA		(0x3ff)
@@ -164,6 +165,7 @@
 struct at91_adc_reg_desc {
 	u8	channel_base;
 	u32	drdy_mask;
+	u32	eoc_mask;
 	u8	status_register;
 	u8	trigger_register;
 	u32	mr_prescal_mask;
@@ -196,6 +198,7 @@ struct at91_adc_state {
 	bool			done;
 	int			irq;
 	u16			last_value;
+	int			chnb;
 	struct mutex		lock;
 	u8			num_channels;
 	void __iomem		*reg_base;
@@ -274,7 +277,7 @@ void handle_adc_eoc_trigger(int irq, struct iio_dev *idev)
 		disable_irq_nosync(irq);
 		iio_trigger_poll(idev->trig, iio_get_time_ns());
 	} else {
-		st->last_value = at91_adc_readl(st, AT91_ADC_LCDR);
+		st->last_value = at91_adc_readl(st, AT91_ADC_CHAN(st, st->chnb));
 		st->done = true;
 		wake_up_interruptible(&st->wq_data_avail);
 	}
@@ -418,7 +421,7 @@ static irqreturn_t at91_adc_9x5_interrupt(int irq, void *private)
 		AT91_ADC_IER_YRDY |
 		AT91_ADC_IER_PRDY;
 
-	if (status & st->registers->drdy_mask)
+	if (status & st->registers->eoc_mask)
 		handle_adc_eoc_trigger(irq, idev);
 
 	if (status & AT91_ADC_IER_PEN) {
@@ -689,9 +692,10 @@ static int at91_adc_read_raw(struct iio_dev *idev,
 	case IIO_CHAN_INFO_RAW:
 		mutex_lock(&st->lock);
 
+		st->chnb = chan->channel;
 		at91_adc_writel(st, AT91_ADC_CHER,
 				AT91_ADC_CH(chan->channel));
-		at91_adc_writel(st, AT91_ADC_IER, st->registers->drdy_mask);
+		at91_adc_writel(st, AT91_ADC_IER, 1 << chan->channel);
 		at91_adc_writel(st, AT91_ADC_CR, AT91_ADC_START);
 
 		ret = wait_event_interruptible_timeout(st->wq_data_avail,
@@ -1384,6 +1388,7 @@ static struct at91_adc_caps at91sam9x5_caps = {
 	.registers = {
 		.channel_base = AT91_ADC_CDR0_9X5,
 		.drdy_mask = AT91_ADC_SR_DRDY_9X5,
+		.eoc_mask = AT91_ADC_SR_EOC_9X5,
 		.status_register = AT91_ADC_SR_9X5,
 		.trigger_register = AT91_ADC_TRGR_9X5,
 		/* prescal mask is same as 9G45 */
