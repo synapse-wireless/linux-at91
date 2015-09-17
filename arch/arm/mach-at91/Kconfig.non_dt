@@ -257,6 +257,12 @@ config MACH_SNAPPER_9260
 	  Select this if you are using the Bluewater Systems Snapper 9260 or
 	  Snapper 9G20 modules.
 	  <http://www.bluewatersys.com/>
+
+config MACH_CONNECT_E10
+	bool "Synapse Wireless Connect E10"
+	help
+	  Select this if you are using a Synapse Wireless Connect E10 board.
+	  <http://www.synapse-wireless.com>
 endif
 
 # ----------------------------------------------------------
